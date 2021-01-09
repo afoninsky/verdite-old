@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+message HTTPRequest {
+  string method = 1;
+  string URL = 2;
+  string proto = 3;
+  map<string, string> header = 4;
+  bytes body = 5;
+}
+
+message HTTPResponse {
+  uint32 status = 1;
+  string proto = 2;
+  map<string, string> header = 3;
+  int64 length = 4;
+  bytes body = 5;
+}
