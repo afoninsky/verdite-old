@@ -3,6 +3,7 @@ package httpproxy
 import (
 	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"time"
@@ -19,24 +20,81 @@ type Proxy struct {
 }
 
 func New(cfg *config.Config) (*Proxy, error) {
-	router := mux.NewRouter()
-	for routeName, rule := range cfg.Rules {
-		route, ok := cfg.Route[routeName]
-		if !ok {
-			return nil, fmt.Errorf(`route "%s" does not exist in config`, routeName)
-		}
-		// router.HandleFunc()
-		// TODO: create router with specific rules
-		for _, handlerName := range rule.RequestHandlers {
-			// TODO: create request plugin if does not exist
+	s := Proxy{
+		// cfg:    cfg,
+		router: mux.NewRouter(),
+		log:    logger.New(),
+	}
+
+	for name, rule := range cfg.Rule {
+		if err := s.createHTTPRoute(name, rule, cfg.Route); err != nil {
+			return nil, err
 		}
 	}
 
-	return &Proxy{
-		cfg:    cfg,
-		router: router,
-		log:    logger.New(),
-	}, nil
+	return &s, nil
+}
+
+func (s *Proxy) createHTTPRoute(name string, rule config.Rule, routes map[string]config.Route) error {
+	rCfg, ok := routes[name]
+	if !ok {
+		return fmt.Errorf(`route "%s" does not exist in config`, name)
+	}
+	route := s.router.Name(name).HandlerFunc(s.createRequestHandler(rule))
+
+	if rCfg.Host != "" {
+		route.Host(rCfg.Host)
+	}
+	if rCfg.Path != "" {
+		route.Path(rCfg.Path)
+	}
+	if rCfg.PathPrefix != "" {
+		route.PathPrefix(rCfg.PathPrefix)
+	}
+	if len(rCfg.Methods) > 0 {
+		route.Methods(rCfg.Methods...)
+	}
+	if len(rCfg.Schemes) > 0 {
+		route.Schemes(rCfg.Schemes...)
+	}
+	if len(rCfg.Headers) > 0 {
+		route.Headers(rCfg.Headers...)
+	}
+	if len(rCfg.Queries) > 0 {
+		route.Queries(rCfg.Queries...)
+	}
+	return nil
+}
+
+func (s *Proxy) createRequestHandler(rule config.Rule) func(w http.ResponseWriter, r *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var err error
+		var body []byte
+		// read request body into buffer if flag specified
+		if rule.ParseRequestBody {
+			body, err = ioutil.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+		}
+		// execute set of interceptors
+		for _, hName := range rule.RequestHandlers {
+			s.log.Info(hName)
+			s.log.Info(body)
+		}
+
+		// tunnel https request
+		if r.Method == http.MethodConnect {
+			tunnelForwarder(w, r)
+			return
+		}
+		httpForwarder(w, r)
+	}
+}
+
+func (s *Proxy) Router() *mux.Router {
+	return s.router
 }
 
 func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {

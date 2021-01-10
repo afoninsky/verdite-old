@@ -13,7 +13,7 @@ type Config struct {
 	Listen      string                    `yaml:"listen" validator:"hostname_port"`
 	Route       map[string]Route          `yaml:"route"`
 	Interceptor map[string]RequestHandler `yaml:"requestHandler"`
-	Rules       map[string]Rule           `yaml:"rule"`
+	Rule        map[string]Rule           `yaml:"rule"`
 }
 
 // Route describes http matching rules: https://github.com/gorilla/mux#matching-routes
@@ -58,7 +58,7 @@ type InterceptorRequest struct {
 
 // Rule specifies http(s) request routing table
 type Rule struct {
-	RequestHandlers []string `yaml:"matchers" validator:"alphanum"`
+	RequestHandlers []string `yaml:"requestHandlers" validator:"alphanum"`
 	// if not specified - body will not be parsed into string
 	// usefull when you want to keep memory/cpu resources and speedup request, and middleware don't need it
 	// disabled by default

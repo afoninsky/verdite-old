@@ -20,7 +20,7 @@ func main() {
 
 	server := &http.Server{
 		Addr:    cfg.Listen,
-		Handler: http.HandlerFunc(proxy.Handler),
+		Handler: proxy.Router(),
 		// disable HTTP/2 support
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}

@@ -3,13 +3,13 @@ listen: localhost:8080
 # https://github.com/gorilla/mux#matching-routes
 route:
   example:
-    host: www.example.com
-    path: /qwe
-    pathPrefix: /qwe
-    methods: ["POST"]
-    schemes: ["http"]
-    headers: ["X-Requested-With"]
-    queries: ["key1", "key2"]
+    host: www.google.com
+    # path: /qwe
+    # pathPrefix: /qwe
+    # methods: ["POST"]
+    # schemes: ["http"]
+    # headers: ["X-Requested-With"]
+    # queries: ["key1", "key2"]
 
 # handler type:
 #   grpc: send request to specific GRPC plugin
@@ -34,7 +34,7 @@ requestHandler:
       headers:
         X-Verdite-Passed: true
 
-rules:
+rule:
   example:
     requestHandlers: ["external", "modify"]
     parseRequestBody: true
