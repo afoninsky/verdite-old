@@ -1,10 +1,13 @@
 package proxy
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/afoninsky/verdite/logger"
@@ -25,12 +28,17 @@ func New(plugin proto.InterceptorClient, log *logger.Logger) *Proxy {
 
 func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 	// request grpc plugin what to do with request
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
 	data, err := s.plugin.OnRequest(context.Background(), &proto.OnRequestInput{
 		Req: &proto.HTTPRequest{
-			Method: r.Method,
-			URL:    r.RequestURI,
-			// Header: r.Header,
-			// Body:   []byte{},
+			Method:  r.Method,
+			URL:     r.RequestURI,
+			Headers: mapHeaders(r.Header),
+			Body:    body,
 		},
 	})
 	if err != nil {
@@ -38,14 +46,30 @@ func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// perform actions based on plugin data
 	switch data.Action {
-	case proto.OnRequestOutput_NONE:
+	case proto.OnRequestOutput_IGNORE:
 		//
 	case proto.OnRequestOutput_REJECT:
-		// TODO: return response
+		for k, v := range data.Res.Headers {
+			w.Header().Set(k, v)
+		}
+		// w.Body = []byte{}
+		w.WriteHeader(int(data.Res.Status))
+		w.Write([]byte{})
+		return
+
 	case proto.OnRequestOutput_UPDATE:
-		// TODO: copy request
+		url, err := url.Parse(data.Req.URL)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return
+		}
+		r.Method = data.Req.Method
+		r.URL = url
+		for k, v := range data.Req.Headers {
+			r.Header.Set(k, v)
+		}
+		r.Body = ioutil.NopCloser(bytes.NewBuffer(data.Req.Body))
 	default:
 		http.Error(w, "wrong answer from the plugin", http.StatusServiceUnavailable)
 		return
@@ -57,6 +81,17 @@ func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httpForwarder(w, r)
+}
+
+// convert http.Header slice to a map containing headers
+func mapHeaders(src http.Header) map[string]string {
+	dst := map[string]string{}
+	for k, vv := range src {
+		for _, v := range vv {
+			dst[k] = v
+		}
+	}
+	return dst
 }
 
 func copyHeaders(dst, src http.Header) {
