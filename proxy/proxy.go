@@ -53,19 +53,23 @@ func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
 		for k, v := range data.Res.Headers {
 			w.Header().Set(k, v)
 		}
-		// w.Body = []byte{}
 		w.WriteHeader(int(data.Res.Status))
-		w.Write([]byte{})
+		w.Write(data.Res.Body)
 		return
 
 	case proto.OnRequestOutput_UPDATE:
-		url, err := url.Parse(data.Req.URL)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-			return
+		if data.Req.URL != "" {
+			url, err := url.Parse(data.Req.URL)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+			r.URL = url
 		}
-		r.Method = data.Req.Method
-		r.URL = url
+		if data.Req.Method != "" {
+			r.Method = data.Req.Method
+		}
+
 		for k, v := range data.Req.Headers {
 			r.Header.Set(k, v)
 		}
