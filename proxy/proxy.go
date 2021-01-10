@@ -1,32 +1,62 @@
-package main
+package proxy
 
 import (
-	"crypto/tls"
+	"context"
 	"io"
 	"net"
 	"net/http"
 	"time"
 
-	"github.com/sirupsen/logrus"
+	"github.com/afoninsky/verdite/logger"
+	"github.com/afoninsky/verdite/proto"
 )
 
-func main() {
-	log := logrus.StandardLogger()
-	server := &http.Server{
-		Addr: "localhost:8080",
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// TODO: auth here
-			// TODO: intercept http request
-			if r.Method == http.MethodConnect {
-				// log.WithField("url", r.URL.String()).Warnln("Unable to intercept HTTP request")
-				tunnelForwarder(w, r)
-				return
-			}
-			httpForwarder(w, r)
-		}),
-		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)), // disable HTTP/2
+type Proxy struct {
+	plugin proto.InterceptorClient
+	log    *logger.Logger
+}
+
+func New(plugin proto.InterceptorClient, log *logger.Logger) *Proxy {
+	return &Proxy{
+		plugin: plugin,
+		log:    log,
 	}
-	log.Fatal(server.ListenAndServe())
+}
+
+func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
+	// request grpc plugin what to do with request
+	data, err := s.plugin.OnRequest(context.Background(), &proto.OnRequestInput{
+		Req: &proto.HTTPRequest{
+			Method: r.Method,
+			URL:    r.RequestURI,
+			// Header: r.Header,
+			// Body:   []byte{},
+		},
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return
+	}
+
+	// perform actions based on plugin data
+	switch data.Action {
+	case proto.OnRequestOutput_NONE:
+		//
+	case proto.OnRequestOutput_REJECT:
+		// TODO: return response
+	case proto.OnRequestOutput_UPDATE:
+		// TODO: copy request
+	default:
+		http.Error(w, "wrong answer from the plugin", http.StatusServiceUnavailable)
+		return
+	}
+
+	// https request
+	if r.Method == http.MethodConnect {
+		tunnelForwarder(w, r)
+		return
+	}
+	httpForwarder(w, r)
 }
 
 func copyHeaders(dst, src http.Header) {
@@ -37,23 +67,12 @@ func copyHeaders(dst, src http.Header) {
 	}
 }
 
-func logRequest(req *http.Request, res *http.Response) {
-	logrus.StandardLogger().
-		// WithField("request_body", req.Body).
-		WithField("url", req.URL.String()).
-		WithField("method", req.Method).
-		// WithField("response", res.Body).
-		Infoln()
-}
-
-// forwards http requests
 func httpForwarder(w http.ResponseWriter, r *http.Request) {
 	res, err := http.DefaultTransport.RoundTrip(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
-	defer logRequest(r, res)
 	defer res.Body.Close()
 	copyHeaders(w.Header(), res.Header)
 	w.WriteHeader(res.StatusCode)
@@ -86,5 +105,5 @@ func tunnelForwarder(w http.ResponseWriter, r *http.Request) {
 func transfer(destination io.WriteCloser, source io.ReadCloser) {
 	defer destination.Close()
 	defer source.Close()
-	_, _ = io.Copy(destination, source)
+	io.Copy(destination, source)
 }
