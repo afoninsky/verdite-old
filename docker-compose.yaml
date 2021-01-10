@@ -1,0 +1,56 @@
+version: "3"
+
+volumes:
+  prometheus: {}
+  grafana: {}
+
+services:
+  grafana:
+    image: grafana/grafana
+    hostname: grafana
+    volumes:
+      - grafana:/var/lib/grafana
+    environment:
+      - GF_DATAPROXY_SEND_USER_HEADER=true
+      - HTTP_PROXY=http://proxy:8080
+    ports:
+      - "3000:3000"
+
+  prometheus:
+    image: victoriametrics/victoria-metrics
+    hostname: prometheus
+    volumes:
+      - prometheus:/victoria-metrics-data
+    ports:
+      - "8428:8428"
+
+  proxy:
+    container_name: proxy
+    hostname: proxy
+    image: golang:1.15
+    ports:
+      - "8080:8080"
+    volumes:
+      - .:/src
+    working_dir: /src
+    # command: go run ./cmd/proxy/proxy.go
+    command: sleep 99999999
+    environment:
+      - INTERCEPTOR=plugin:9090
+      - LISTEN=0.0.0.0:8080
+    depends_on:
+      - plugin
+
+  plugin:
+    container_name: plugin
+    hostname: plugin
+    image: golang:1.15
+    ports:
+      - "9090:9090"
+    environment:
+      - LISTEN=0.0.0.0:9090
+    volumes:
+      - .:/src
+    working_dir: /src
+    # command: go run ./cmd/plugin/plugin.go
+    command: sleep 99999999

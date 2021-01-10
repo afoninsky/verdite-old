@@ -1,11 +1,11 @@
-package dummy
+package plugin
 
 import (
 	"context"
 	"math/rand"
 	"net/http"
 
-	"github.com/afoninsky/verdite/logger"
+	"github.com/afoninsky/utilities/pkg/logger"
 	"github.com/afoninsky/verdite/proto"
 )
 
