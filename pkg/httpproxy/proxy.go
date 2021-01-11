@@ -10,13 +10,15 @@ import (
 
 	"github.com/afoninsky/utilities/pkg/logger"
 	"github.com/afoninsky/verdite/pkg/config"
+	"github.com/afoninsky/verdite/pkg/interceptor"
 	"github.com/gorilla/mux"
 )
 
 type Proxy struct {
-	log    *logger.Logger
-	cfg    *config.Config
-	router *mux.Router
+	log      *logger.Logger
+	cfg      *config.Config
+	router   *mux.Router
+	handlers map[string]*interceptor.Interceptor
 }
 
 func New(cfg *config.Config) (*Proxy, error) {
@@ -26,10 +28,21 @@ func New(cfg *config.Config) (*Proxy, error) {
 		log:    logger.New(),
 	}
 
-	for name, rule := range cfg.Rule {
-		if err := s.createHTTPRoute(name, rule, cfg.Route); err != nil {
+	s.handlers = map[string]*interceptor.Interceptor{}
+	for name, cfgRH := range cfg.RequestHandler {
+		rh, err := interceptor.New(name, cfgRH)
+		if err != nil {
 			return nil, err
 		}
+		s.handlers[name] = rh
+		s.log.WithField("name", name).Infoln("Request handler created")
+	}
+
+	for name, cfgRule := range cfg.Rule {
+		if err := s.createHTTPRoute(name, cfgRule, cfg.Route); err != nil {
+			return nil, err
+		}
+		s.log.WithField("name", name).Infoln("Route created")
 	}
 
 	return &s, nil
@@ -80,8 +93,9 @@ func (s *Proxy) createRequestHandler(rule config.Rule) func(w http.ResponseWrite
 		}
 		// execute set of interceptors
 		for _, hName := range rule.RequestHandlers {
-			s.log.Info(hName)
-			s.log.Info(body)
+			if s.callHandler(hName, w, r) {
+				return
+			}
 		}
 
 		// tunnel https request
@@ -97,7 +111,13 @@ func (s *Proxy) Router() *mux.Router {
 	return s.router
 }
 
-func (s *Proxy) Handler(w http.ResponseWriter, r *http.Request) {
+func (s *Proxy) callHandler(hName string, w http.ResponseWriter, r *http.Request) {
+	h, ok := s.handlers[hName]
+	if !ok {
+		http.Error(w, "handler does not exist", http.StatusServiceUnavailable)
+		return
+	}
+	// TODO
 	// // request grpc plugin what to do with request
 	// body, err := ioutil.ReadAll(r.Body)
 	// if err != nil {

@@ -10,10 +10,10 @@ import (
 
 // Config implements proxy configuration
 type Config struct {
-	Listen      string                    `yaml:"listen" validator:"hostname_port"`
-	Route       map[string]Route          `yaml:"route"`
-	Interceptor map[string]RequestHandler `yaml:"requestHandler"`
-	Rule        map[string]Rule           `yaml:"rule"`
+	Listen         string                    `yaml:"listen" validator:"hostname_port"`
+	Route          map[string]Route          `yaml:"route"`
+	RequestHandler map[string]RequestHandler `yaml:"requestHandler"`
+	Rule           map[string]Rule           `yaml:"rule"`
 }
 
 // Route describes http matching rules: https://github.com/gorilla/mux#matching-routes
