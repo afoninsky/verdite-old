@@ -1,36 +1,33 @@
 listen: localhost:8080
 
-# interceptor type:
-#   grpc: send request to specific GRPC plugin
-#   response: directly response to the request
-#   forward: act as a proxy forwarding request further
+# interceptor types
+#   grpc: sends request to external GRPC service before processing further
+#   response: stops processing request responsing with specified data
+#   forward: forwards request furher updating it if required
 interceptors:
   auth-grafana:
     type: grpc
     grpc:
       address: localhost:9090
-  deny:
-    type: response
-    response:
-      status: 401
-      body: access is forbidden
-      headers:
-        X-Verdite-Passed: true
-  pass:
+  watermark:
     type: forward
     request:
       headers:
         X-Verdite-Passed: true
+  forbid-access:
+    type: response
+    response:
+      status: 401
+      body: Direct access is forbidden
 
-# https://github.com/gorilla/mux#matching-routes
 rules:
-  # allow requests to grafana only if they have "X-Grafana-User" header
+  # any GET request starting from "/grafana" will be forwarded to external plugin
   - match:
       method: GET
-      path: /grafana
-    onRequest: ["auth-grafana"]
-  # reject requests to google
+      path: /grafana/*any
+    onRequest: ["auth-grafana", "watermark"]
+  # any GET request starting from "/google" will be blocked with according response
   - match:
       method: GET
       path: /google
-    onRequest: ["deny"]
+    onRequest: ["forbid-access"]

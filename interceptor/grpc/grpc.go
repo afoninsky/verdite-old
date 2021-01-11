@@ -13,8 +13,6 @@ type Plugin struct {
 	client proto.InterceptorClient
 }
 
-// TODO: handle things like reconnect/health checks etc
-
 // New ...
 func New(name string, cfg config.Interceptor) (Plugin, error) {
 	s := Plugin{}

@@ -25,7 +25,6 @@ type Interceptor struct {
 // InterceptorGRPC sends request to external GRPC service before processing further
 type InterceptorGRPC struct {
 	Address string `yaml:"address" validator:"required"`
-	// TODO: add request timeouts
 	// Timeout time.Duration `yaml:"timeout"`
 }
 
@@ -41,7 +40,6 @@ type Rule struct {
 	Match     Matcher  `yaml:"match"`
 	OnRequest []string `yaml:"onRequest"`
 	ParseBody bool     `yaml:"parseBoy"`
-	// TODO: support LRU cache
 }
 
 // Matcher describes http matching rules
