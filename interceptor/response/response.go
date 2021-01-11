@@ -6,8 +6,8 @@ package response
 import (
 	"context"
 
-	"github.com/afoninsky/verdite/pkg/config"
-	"github.com/afoninsky/verdite/pkg/proto"
+	"github.com/afoninsky/verdite/config"
+	"github.com/afoninsky/verdite/proto"
 )
 
 // Plugin ...
@@ -16,7 +16,7 @@ type Plugin struct {
 }
 
 // New ...
-func New(name string, cfg config.RequestHandler) (Plugin, error) {
+func New(name string, cfg config.Interceptor) (Plugin, error) {
 	return Plugin{
 		cfg: cfg.Response,
 	}, nil

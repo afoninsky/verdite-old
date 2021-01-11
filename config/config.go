@@ -10,14 +10,14 @@ import (
 
 // Config implements proxy configuration
 type Config struct {
-	Listen         string                    `yaml:"listen" validator:"hostname_port"`
-	Route          map[string]Route          `yaml:"route"`
-	RequestHandler map[string]RequestHandler `yaml:"requestHandler"`
-	Rule           map[string]Rule           `yaml:"rule"`
+	Listen       string                 `yaml:"listen" validator:"hostname_port"`
+	Matchers     map[string]Matcher     `yaml:"matchers"`
+	Interceptors map[string]Interceptor `yaml:"interceptors"`
+	Routes       map[string][]string    `yaml:"routes"`
 }
 
-// Route describes http matching rules: https://github.com/gorilla/mux#matching-routes
-type Route struct {
+// Matcher describes http matching rules: https://github.com/gorilla/mux#matching-routes
+type Matcher struct {
 	Host       string   `yaml:"host" validator:"hostname"`
 	Path       string   `yaml:"path" validator:"uri startswith=/"`
 	PathPrefix string   `yaml:"pathPrefix" validator:"uri startswith=/"`
@@ -25,10 +25,11 @@ type Route struct {
 	Schemes    []string `yaml:"schemes" validator:"oneof=http https"`
 	Headers    []string `yaml:"headers"`
 	Queries    []string `yaml:"queries"`
+	ParseBody  bool     `yaml:"parseBody"`
 }
 
-// RequestHandler describes request interceptor
-type RequestHandler struct {
+// Interceptor describes request interceptor
+type Interceptor struct {
 	Type     string              `yaml:"type" validator:"oneof=grpc response forward"`
 	GRPC     InterceptorGRPC     `yaml:"grpc"`
 	Response InterceptorResponse `yaml:"response"`
@@ -54,15 +55,6 @@ type InterceptorRequest struct {
 	URL     string            `yaml:"url" validator:"url"`
 	Headers map[string]string `yaml:"headers"`
 	Body    string            `yaml:"body"`
-}
-
-// Rule specifies http(s) request routing table
-type Rule struct {
-	RequestHandlers []string `yaml:"requestHandlers" validator:"alphanum"`
-	// if not specified - body will not be parsed into string
-	// usefull when you want to keep memory/cpu resources and speedup request, and middleware don't need it
-	// disabled by default
-	ParseRequestBody bool `yaml:"parseRequestBody"`
 }
 
 // New returns configruation instance

@@ -4,17 +4,20 @@ import (
 	"context"
 
 	"github.com/afoninsky/utilities/pkg/logger"
-	"github.com/afoninsky/verdite/pkg/config"
-	"github.com/afoninsky/verdite/pkg/proto"
+	"github.com/afoninsky/verdite/config"
+	"github.com/afoninsky/verdite/proto"
 )
 
-type plugin struct{}
+// Plugin ...
+type Plugin struct{}
 
-func New(name string, cfg config.RequestHandler) (plugin, error) {
-	return plugin{}, nil
+// New ...
+func New(name string, cfg config.Interceptor) (Plugin, error) {
+	return Plugin{}, nil
 }
 
-func (s plugin) OnRequest(ctx context.Context, in *proto.OnRequestInput) (*proto.OnRequestOutput, error) {
+// OnRequest ...
+func (s Plugin) OnRequest(ctx context.Context, in *proto.OnRequestInput) (*proto.OnRequestOutput, error) {
 	log := logger.New().
 		WithField("method", in.Req.Method).
 		WithField("url", in.Req.URL)

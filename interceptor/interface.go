@@ -4,18 +4,20 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/afoninsky/verdite/pkg/config"
-	"github.com/afoninsky/verdite/pkg/interceptor/forward"
-	"github.com/afoninsky/verdite/pkg/interceptor/grpc"
-	"github.com/afoninsky/verdite/pkg/interceptor/response"
-	"github.com/afoninsky/verdite/pkg/proto"
+	"github.com/afoninsky/verdite/config"
+	"github.com/afoninsky/verdite/interceptor/forward"
+	"github.com/afoninsky/verdite/interceptor/grpc"
+	"github.com/afoninsky/verdite/interceptor/response"
+	"github.com/afoninsky/verdite/proto"
 )
 
+// Interceptor describes interceptor plugin interface
 type Interceptor interface {
 	OnRequest(context.Context, *proto.OnRequestInput) (*proto.OnRequestOutput, error)
 }
 
-func New(name string, cfg config.RequestHandler) (Interceptor, error) {
+// New ...
+func New(name string, cfg config.Interceptor) (Interceptor, error) {
 	var err error
 	var t Interceptor
 
