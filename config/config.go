@@ -41,12 +41,13 @@ type Rule struct {
 	Match     Matcher  `yaml:"match"`
 	OnRequest []string `yaml:"onRequest"`
 	ParseBody bool     `yaml:"parseBoy"`
+	// TODO: support LRU cache
 }
 
 // Matcher describes http matching rules
 type Matcher struct {
-	Path   string `yaml:"path" validator:"required uri startswith=/"`
-	Method string `yaml:"method" validator:"required oneof=GET POST PUT DELETE PATCH DELETE"`
+	Path   string `yaml:"path" validator:"required,uri,startswith=/"`
+	Method string `yaml:"method" validator:"required,oneof=GET POST PUT DELETE PATCH DELETE"`
 	// TODO: support domains: https://github.com/julienschmidt/httprouter#multi-domain--sub-domains
 }
 

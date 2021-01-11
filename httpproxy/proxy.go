@@ -41,13 +41,14 @@ func New(cfg *config.Config) (*Proxy, error) {
 			return nil, err
 		}
 		s.handlers[name] = rh
-		s.log.WithField("name", name).Info("Request interceptor created")
 	}
 
 	// create http request matchers
 	for _, rule := range cfg.Rules {
 		handler := s.createRequestHandler(rule)
 		s.router.HandlerFunc(rule.Match.Method, rule.Match.Path, handler)
+		s.log.WithField("interceptors", strings.Join(rule.OnRequest, ",")).
+			Infof("Rule added: %s //*%s", rule.Match.Method, rule.Match.Path)
 	}
 
 	// s.router.Use(s.loggingMiddleware)
@@ -62,25 +63,12 @@ func (s *Proxy) Handler() *httprouter.Router {
 
 // implements default logic if no routes found
 func (s *Proxy) defaultRoute(w http.ResponseWriter, r *http.Request) {
-	s.log.Info("pass default request")
 	if r.Method == http.MethodConnect {
 		tunnelForwarder(w, r)
 		return
 	}
 	httpForwarder(w, r)
 }
-
-// func (s *Proxy) loggingMiddleware(next http.Handler) http.Handler {
-// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-// 		defer func() {
-// 			s.log.
-// 				WithField("method", r.Method).
-// 				WithField("match", r.Context().Value("matcher")).
-// 				Info(r.URL)
-// 		}()
-// 		next.ServeHTTP(w, r)
-// 	})
-// }
 
 func (s *Proxy) createRequestHandler(cfg config.Rule) func(w http.ResponseWriter, r *http.Request) {
 
@@ -90,7 +78,7 @@ func (s *Proxy) createRequestHandler(cfg config.Rule) func(w http.ResponseWriter
 		chain := []string{}
 
 		defer func() {
-			s.log.WithField("chain", strings.Join(chain, ",")).
+			s.log.WithField("rules", strings.Join(chain, ",")).
 				Infof("%s %s", r.Method, r.URL)
 		}()
 
@@ -135,11 +123,6 @@ func (s *Proxy) callInterceptor(name string, body []byte, w http.ResponseWriter,
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return false
 	}
-
-	// s.log.
-	// 	WithField("handler", hName).
-	// 	WithField("action", data.Action.String()).
-	// 	Infof("%s %s", r.Method, r.URL)
 
 	switch data.Action {
 	// do not modify request and pass it further

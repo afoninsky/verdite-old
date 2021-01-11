@@ -29,7 +29,7 @@ rules:
   - match:
       method: GET
       path: /grafana
-    onRequest: ["pass", "deny"]
+    onRequest: ["auth-grafana"]
   # reject requests to google
   - match:
       method: GET
