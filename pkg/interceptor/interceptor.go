@@ -15,7 +15,7 @@ type Interceptor interface {
 	OnRequest(context.Context, *proto.OnRequestInput) (*proto.OnRequestOutput, error)
 }
 
-func New(name string, cfg config.RequestHandler) (*Interceptor, error) {
+func New(name string, cfg config.RequestHandler) (Interceptor, error) {
 	var err error
 	var t Interceptor
 
@@ -30,5 +30,5 @@ func New(name string, cfg config.RequestHandler) (*Interceptor, error) {
 		err = fmt.Errorf(`unsupported interceptor type: %s`, cfg.Type)
 	}
 
-	return &t, err
+	return t, err
 }

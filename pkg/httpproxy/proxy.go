@@ -1,16 +1,20 @@
 package httpproxy
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/afoninsky/utilities/pkg/logger"
 	"github.com/afoninsky/verdite/pkg/config"
 	"github.com/afoninsky/verdite/pkg/interceptor"
+	"github.com/afoninsky/verdite/pkg/proto"
 	"github.com/gorilla/mux"
 )
 
@@ -18,7 +22,7 @@ type Proxy struct {
 	log      *logger.Logger
 	cfg      *config.Config
 	router   *mux.Router
-	handlers map[string]*interceptor.Interceptor
+	handlers map[string]interceptor.Interceptor
 }
 
 func New(cfg *config.Config) (*Proxy, error) {
@@ -28,7 +32,7 @@ func New(cfg *config.Config) (*Proxy, error) {
 		log:    logger.New(),
 	}
 
-	s.handlers = map[string]*interceptor.Interceptor{}
+	s.handlers = map[string]interceptor.Interceptor{}
 	for name, cfgRH := range cfg.RequestHandler {
 		rh, err := interceptor.New(name, cfgRH)
 		if err != nil {
@@ -81,19 +85,9 @@ func (s *Proxy) createHTTPRoute(name string, rule config.Rule, routes map[string
 
 func (s *Proxy) createRequestHandler(rule config.Rule) func(w http.ResponseWriter, r *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var err error
-		var body []byte
-		// read request body into buffer if flag specified
-		if rule.ParseRequestBody {
-			body, err = ioutil.ReadAll(r.Body)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusServiceUnavailable)
-				return
-			}
-		}
 		// execute set of interceptors
 		for _, hName := range rule.RequestHandlers {
-			if s.callHandler(hName, w, r) {
+			if !s.callHandler(hName, rule.ParseRequestBody, w, r) {
 				return
 			}
 		}
@@ -111,71 +105,79 @@ func (s *Proxy) Router() *mux.Router {
 	return s.router
 }
 
-func (s *Proxy) callHandler(hName string, w http.ResponseWriter, r *http.Request) {
-	h, ok := s.handlers[hName]
+func (s *Proxy) callHandler(hName string, parseBody bool, w http.ResponseWriter, r *http.Request) bool {
+	handler, ok := s.handlers[hName]
 	if !ok {
 		http.Error(w, "handler does not exist", http.StatusServiceUnavailable)
-		return
+		return false
 	}
-	// TODO
-	// // request grpc plugin what to do with request
-	// body, err := ioutil.ReadAll(r.Body)
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	// 	return
-	// }
-	// data, err := s.plugin.OnRequest(context.Background(), &proto.OnRequestInput{
-	// 	Req: &proto.HTTPRequest{
-	// 		Method:  r.Method,
-	// 		URL:     r.RequestURI,
-	// 		Headers: mapHeaders(r.Header),
-	// 		Body:    body,
-	// 	},
-	// })
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	// 	return
-	// }
 
-	// switch data.Action {
-	// case proto.OnRequestOutput_IGNORE:
-	// 	//
-	// case proto.OnRequestOutput_REJECT:
-	// 	for k, v := range data.Res.Headers {
-	// 		w.Header().Set(k, v)
-	// 	}
-	// 	w.WriteHeader(int(data.Res.Status))
-	// 	w.Write(data.Res.Body)
-	// 	return
+	var err error
+	var body []byte
 
-	// case proto.OnRequestOutput_UPDATE:
-	// 	if data.Req.URL != "" {
-	// 		url, err := url.Parse(data.Req.URL)
-	// 		if err != nil {
-	// 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	// 			return
-	// 		}
-	// 		r.URL = url
-	// 	}
-	// 	if data.Req.Method != "" {
-	// 		r.Method = data.Req.Method
-	// 	}
+	// read request body into buffer if flag specified
+	if parseBody {
+		body, err = ioutil.ReadAll(r.Body)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusServiceUnavailable)
+			return false
+		}
+	}
 
-	// 	for k, v := range data.Req.Headers {
-	// 		r.Header.Set(k, v)
-	// 	}
-	// 	r.Body = ioutil.NopCloser(bytes.NewBuffer(data.Req.Body))
-	// default:
-	// 	http.Error(w, "wrong answer from the plugin", http.StatusServiceUnavailable)
-	// 	return
-	// }
+	data, err := handler.OnRequest(context.Background(), &proto.OnRequestInput{
+		Req: &proto.HTTPRequest{
+			Method:  r.Method,
+			URL:     r.RequestURI,
+			Headers: mapHeaders(r.Header),
+			Body:    body,
+		},
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return false
+	}
 
-	// // https request
-	// if r.Method == http.MethodConnect {
-	// 	tunnelForwarder(w, r)
-	// 	return
-	// }
-	// httpForwarder(w, r)
+	s.log.
+		WithField("handler", hName).
+		WithField("action", data.Action.String()).
+		Infof("%s %s", r.Method, r.URL)
+
+	switch data.Action {
+	case proto.OnRequestOutput_IGNORE:
+		return true
+	case proto.OnRequestOutput_RESPONSE:
+		for k, v := range data.Res.Headers {
+			w.Header().Set(k, v)
+		}
+		w.WriteHeader(int(data.Res.Status))
+		w.Write(data.Res.Body)
+		return false
+
+	case proto.OnRequestOutput_FORWARD:
+		if data.Req.URL != "" {
+			url, err := url.Parse(data.Req.URL)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return false
+			}
+			r.URL = url
+		}
+		if data.Req.Method != "" {
+			r.Method = data.Req.Method
+		}
+
+		for k, v := range data.Req.Headers {
+			r.Header.Set(k, v)
+		}
+
+		if parseBody && len(data.Req.Body) > 0 {
+			r.Body = ioutil.NopCloser(bytes.NewBuffer(data.Req.Body))
+		}
+		return true
+	default:
+		http.Error(w, "wrong answer from the plugin", http.StatusServiceUnavailable)
+		return false
+	}
 }
 
 // convert http.Header slice to a map containing headers

@@ -1,32 +1,48 @@
+// Package forward implements http request interceptor with the following defaults:
+// 	- request marked as allowed to proceed
+// 	- request entities are added if specified
 package forward
 
 import (
 	"context"
 
-	"github.com/afoninsky/utilities/pkg/logger"
 	"github.com/afoninsky/verdite/pkg/config"
 	"github.com/afoninsky/verdite/pkg/proto"
 )
 
-type plugin struct{}
-
-func New(name string, cfg config.RequestHandler) (*plugin, error) {
-	return &plugin{}, nil
+// Plugin ...
+type Plugin struct {
+	cfg config.InterceptorRequest
 }
 
-func (s *plugin) OnRequest(ctx context.Context, in *proto.OnRequestInput) (*proto.OnRequestOutput, error) {
-	log := logger.New().
-		WithField("method", in.Req.Method).
-		WithField("url", in.Req.URL)
+// New ...
+func New(name string, cfg config.RequestHandler) (Plugin, error) {
+	return Plugin{
+		cfg: cfg.Request,
+	}, nil
+}
 
-	for k, v := range in.Req.Headers {
-		log = log.WithField(k, v)
+// OnRequest ...
+func (s Plugin) OnRequest(ctx context.Context, in *proto.OnRequestInput) (*proto.OnRequestOutput, error) {
+
+	httpReq := proto.HTTPRequest{}
+	if s.cfg.Method != "" {
+		httpReq.Method = s.cfg.Method
+	}
+	if s.cfg.URL != "" {
+		httpReq.URL = s.cfg.URL
+	}
+	if s.cfg.Body != "" {
+		httpReq.Body = []byte(s.cfg.Body)
+	}
+	httpReq.Headers = map[string]string{}
+	for k, v := range s.cfg.Headers {
+		httpReq.Headers[k] = v
 	}
 
-	log.Infoln("Request")
-
 	res := proto.OnRequestOutput{
-		Action: proto.OnRequestOutput_IGNORE,
+		Action: proto.OnRequestOutput_FORWARD,
+		Req:    &httpReq,
 	}
 	return &res, nil
 }

@@ -10,11 +10,11 @@ import (
 
 type plugin struct{}
 
-func New(name string, cfg config.RequestHandler) (*plugin, error) {
-	return &plugin{}, nil
+func New(name string, cfg config.RequestHandler) (plugin, error) {
+	return plugin{}, nil
 }
 
-func (s *plugin) OnRequest(ctx context.Context, in *proto.OnRequestInput) (*proto.OnRequestOutput, error) {
+func (s plugin) OnRequest(ctx context.Context, in *proto.OnRequestInput) (*proto.OnRequestOutput, error) {
 	log := logger.New().
 		WithField("method", in.Req.Method).
 		WithField("url", in.Req.URL)

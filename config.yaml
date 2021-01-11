@@ -2,7 +2,8 @@ listen: localhost:8080
 
 # https://github.com/gorilla/mux#matching-routes
 route:
-  example:
+  default: {}
+  google:
     host: www.google.com
     # path: /qwe
     # pathPrefix: /qwe
@@ -28,13 +29,14 @@ requestHandler:
       body: access is forbidden
       headers:
         X-Verdite-Passed: true
-  modify:
+  pass:
     type: forward
     request:
       headers:
         X-Verdite-Passed: true
 
 rule:
-  example:
-    requestHandlers: ["external", "modify"]
-    parseRequestBody: true
+  google:
+    requestHandlers: ["forbid"]
+  default:
+    requestHandlers: ["pass"]

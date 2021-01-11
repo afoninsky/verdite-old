@@ -13,9 +13,9 @@ message OnRequestOutput {
     // continue processing request without any modification
     IGNORE = 0;
     // continue processing request, update it based on .req field
-    UPDATE = 1;
+    FORWARD = 1;
     // reject processing, return response specified in .res
-    REJECT = 2;
+    RESPONSE = 2;
   }
   Action action = 1;
   HTTPRequest req = 2;

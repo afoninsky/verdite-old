@@ -50,7 +50,7 @@ type InterceptorResponse struct {
 
 // InterceptorRequest ...
 type InterceptorRequest struct {
-	Method  []string          `yaml:"method" validator:"oneof=GET POST PUT DELETE PATCH DELETE"`
+	Method  string            `yaml:"method" validator:"oneof=GET POST PUT DELETE PATCH DELETE"`
 	URL     string            `yaml:"url" validator:"url"`
 	Headers map[string]string `yaml:"headers"`
 	Body    string            `yaml:"body"`
