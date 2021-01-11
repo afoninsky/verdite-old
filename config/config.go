@@ -43,15 +43,11 @@ type Rule struct {
 	ParseBody bool     `yaml:"parseBoy"`
 }
 
-// Matcher describes http matching rules: https://github.com/gorilla/mux#matching-routes
+// Matcher describes http matching rules
 type Matcher struct {
-	Host       string   `yaml:"host" validator:"hostname"`
-	Path       string   `yaml:"path" validator:"uri startswith=/"`
-	PathPrefix string   `yaml:"pathPrefix" validator:"uri startswith=/"`
-	Methods    []string `yaml:"methods" validator:"oneof=GET POST PUT DELETE PATCH DELETE"`
-	Schemes    []string `yaml:"schemes" validator:"oneof=http https"`
-	Headers    []string `yaml:"headers"`
-	Queries    []string `yaml:"queries"`
+	Path   string `yaml:"path" validator:"required uri startswith=/"`
+	Method string `yaml:"method" validator:"required oneof=GET POST PUT DELETE PATCH DELETE"`
+	// TODO: support domains: https://github.com/julienschmidt/httprouter#multi-domain--sub-domains
 }
 
 // InterceptorRequest ...

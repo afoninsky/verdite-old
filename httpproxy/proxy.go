@@ -9,28 +9,29 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/afoninsky/utilities/pkg/logger"
 	"github.com/afoninsky/verdite/config"
 	"github.com/afoninsky/verdite/interceptor"
 	"github.com/afoninsky/verdite/proto"
-	"github.com/gorilla/mux"
+	"github.com/julienschmidt/httprouter"
 )
 
 // Proxy ...
 type Proxy struct {
 	log      *logger.Logger
-	router   *mux.Router
 	handlers map[string]interceptor.Interceptor
+	router   *httprouter.Router
 }
 
 // New ...
 func New(cfg *config.Config) (*Proxy, error) {
-	s := Proxy{
-		router: mux.NewRouter(),
-		log:    logger.New(),
-	}
+	s := Proxy{}
+	s.log = logger.New()
+	s.router = &httprouter.Router{}
+	s.router.NotFound = http.HandlerFunc(s.defaultRoute)
 
 	// init http request interceptors
 	s.handlers = map[string]interceptor.Interceptor{}
@@ -44,8 +45,9 @@ func New(cfg *config.Config) (*Proxy, error) {
 	}
 
 	// create http request matchers
-	for _, rCfg := range cfg.Rules {
-		s.addHTTPRoute(rCfg)
+	for _, rule := range cfg.Rules {
+		handler := s.createRequestHandler(rule)
+		s.router.HandlerFunc(rule.Match.Method, rule.Match.Path, handler)
 	}
 
 	// s.router.Use(s.loggingMiddleware)
@@ -53,9 +55,19 @@ func New(cfg *config.Config) (*Proxy, error) {
 	return &s, nil
 }
 
-// Router returns http mux router
-func (s *Proxy) Router() *mux.Router {
+// Handler returns http default middleware
+func (s *Proxy) Handler() *httprouter.Router {
 	return s.router
+}
+
+// implements default logic if no routes found
+func (s *Proxy) defaultRoute(w http.ResponseWriter, r *http.Request) {
+	s.log.Info("pass default request")
+	if r.Method == http.MethodConnect {
+		tunnelForwarder(w, r)
+		return
+	}
+	httpForwarder(w, r)
 }
 
 // func (s *Proxy) loggingMiddleware(next http.Handler) http.Handler {
@@ -70,36 +82,17 @@ func (s *Proxy) Router() *mux.Router {
 // 	})
 // }
 
-// create mux route based on request matcher
-func (s *Proxy) addHTTPRoute(cfg config.Rule) {
-	route := s.router.NewRoute().HandlerFunc(s.createRequestHandler(cfg))
-
-	if cfg.Match.Host != "" {
-		route.Host(cfg.Match.Host)
-	}
-	if cfg.Match.Path != "" {
-		route.Path(cfg.Match.Path)
-	}
-	if cfg.Match.PathPrefix != "" {
-		route.PathPrefix(cfg.Match.PathPrefix)
-	}
-	if len(cfg.Match.Methods) > 0 {
-		route.Methods(cfg.Match.Methods...)
-	}
-	if len(cfg.Match.Schemes) > 0 {
-		route.Schemes(cfg.Match.Schemes...)
-	}
-	if len(cfg.Match.Headers) > 0 {
-		route.Headers(cfg.Match.Headers...)
-	}
-	if len(cfg.Match.Queries) > 0 {
-		route.Queries(cfg.Match.Queries...)
-	}
-}
-
 func (s *Proxy) createRequestHandler(cfg config.Rule) func(w http.ResponseWriter, r *http.Request) {
 
 	return func(w http.ResponseWriter, r *http.Request) {
+		s.log.Info("pass custom request")
+
+		chain := []string{}
+
+		defer func() {
+			s.log.WithField("chain", strings.Join(chain, ",")).
+				Infof("%s %s", r.Method, r.URL)
+		}()
 
 		// parse body if according flag is specified
 		// by default body is not parsed and passed "as is" to avoid request processing time increase
@@ -113,26 +106,20 @@ func (s *Proxy) createRequestHandler(cfg config.Rule) func(w http.ResponseWriter
 			}
 		}
 
-		// execute interceptors chain
+		// apply chain of request interceptora
 		for _, name := range cfg.OnRequest {
+			chain = append(chain, name)
 			if !s.callInterceptor(name, body, w, r) {
-				return
+				break
 			}
 		}
-
-		// tunnel https request
-		if r.Method == http.MethodConnect {
-			tunnelForwarder(w, r)
-			return
-		}
-		httpForwarder(w, r)
 	}
 }
 
 func (s *Proxy) callInterceptor(name string, body []byte, w http.ResponseWriter, r *http.Request) bool {
 	handler, ok := s.handlers[name]
 	if !ok {
-		http.Error(w, fmt.Sprint(`unable to find "%s" interceptor`, name), http.StatusServiceUnavailable)
+		http.Error(w, fmt.Sprintf(`unable to find "%s" interceptor`, name), http.StatusServiceUnavailable)
 		return false
 	}
 

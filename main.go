@@ -19,8 +19,9 @@ func main() {
 	log.FatalIfErr(err)
 
 	server := &http.Server{
-		Addr:    cfg.Listen,
-		Handler: proxy.Router(),
+		Addr: cfg.Listen,
+		// Handler: http.HandlerFunc(proxy.Handler),
+		Handler: proxy.Handler(),
 		// disable HTTP/2 support
 		TLSNextProto: make(map[string]func(*http.Server, *tls.Conn, http.Handler)),
 	}
