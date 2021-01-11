@@ -1,3 +1,6 @@
+# Verdite
+> HTTP(s) proxy service with pluggable grpc-based request interceptors
+
 ### Roadmap
 - [ ] make GRPC plugins more reliable (auto-reconnect, health checks, request duration)
 - [ ] cloud support (prometheus metrics, http health check)
