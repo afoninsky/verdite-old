@@ -2,7 +2,6 @@ package config
 
 import (
 	"os"
-	"time"
 
 	"github.com/go-playground/validator/v10"
 	"gopkg.in/yaml.v2"
@@ -25,8 +24,9 @@ type Interceptor struct {
 
 // InterceptorGRPC sends request to external GRPC service before processing further
 type InterceptorGRPC struct {
-	Address string        `yaml:"address" validator:"required"`
-	Timeout time.Duration `yaml:"timeout"`
+	Address string `yaml:"address" validator:"required"`
+	// TODO: add request timeouts
+	// Timeout time.Duration `yaml:"timeout"`
 }
 
 // InterceptorResponse ...

@@ -9,7 +9,6 @@ interceptors:
     type: grpc
     grpc:
       address: localhost:9090
-      timeout: 500ms
   deny:
     type: response
     response:

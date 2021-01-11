@@ -73,7 +73,6 @@ func (s *Proxy) defaultRoute(w http.ResponseWriter, r *http.Request) {
 func (s *Proxy) createRequestHandler(cfg config.Rule) func(w http.ResponseWriter, r *http.Request) {
 
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.log.Info("pass custom request")
 
 		chain := []string{}
 
