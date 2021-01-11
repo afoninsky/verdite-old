@@ -1,14 +1,20 @@
 package httpproxy
 
 import (
+	"bytes"
+	"context"
+	"fmt"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/afoninsky/utilities/pkg/logger"
 	"github.com/afoninsky/verdite/config"
 	"github.com/afoninsky/verdite/interceptor"
+	"github.com/afoninsky/verdite/proto"
 	"github.com/gorilla/mux"
 )
 
@@ -34,13 +40,12 @@ func New(cfg *config.Config) (*Proxy, error) {
 			return nil, err
 		}
 		s.handlers[name] = rh
-		s.log.WithField("name", name).Infoln("Request interceptor created")
+		s.log.WithField("name", name).Info("Request interceptor created")
 	}
 
 	// create http request matchers
-	for name, rCfg := range cfg.Matchers {
-		s.addHTTPRoute(name, rCfg)
-		s.log.WithField("name", name).Infoln("HTTP route matcher created")
+	for _, rCfg := range cfg.Rules {
+		s.addHTTPRoute(rCfg)
 	}
 
 	// s.router.Use(s.loggingMiddleware)
@@ -66,42 +71,54 @@ func (s *Proxy) Router() *mux.Router {
 // }
 
 // create mux route based on request matcher
-func (s *Proxy) addHTTPRoute(name string, rCfg config.Matcher) {
-	route := s.router.Name(name).HandlerFunc(s.createRequestHandler(name, rCfg))
-	if rCfg.Host != "" {
-		route.Host(rCfg.Host)
+func (s *Proxy) addHTTPRoute(cfg config.Rule) {
+	route := s.router.NewRoute().HandlerFunc(s.createRequestHandler(cfg))
+
+	if cfg.Match.Host != "" {
+		route.Host(cfg.Match.Host)
 	}
-	if rCfg.Path != "" {
-		route.Path(rCfg.Path)
+	if cfg.Match.Path != "" {
+		route.Path(cfg.Match.Path)
 	}
-	if rCfg.PathPrefix != "" {
-		route.PathPrefix(rCfg.PathPrefix)
+	if cfg.Match.PathPrefix != "" {
+		route.PathPrefix(cfg.Match.PathPrefix)
 	}
-	if len(rCfg.Methods) > 0 {
-		route.Methods(rCfg.Methods...)
+	if len(cfg.Match.Methods) > 0 {
+		route.Methods(cfg.Match.Methods...)
 	}
-	if len(rCfg.Schemes) > 0 {
-		route.Schemes(rCfg.Schemes...)
+	if len(cfg.Match.Schemes) > 0 {
+		route.Schemes(cfg.Match.Schemes...)
 	}
-	if len(rCfg.Headers) > 0 {
-		route.Headers(rCfg.Headers...)
+	if len(cfg.Match.Headers) > 0 {
+		route.Headers(cfg.Match.Headers...)
 	}
-	if len(rCfg.Queries) > 0 {
-		route.Queries(rCfg.Queries...)
+	if len(cfg.Match.Queries) > 0 {
+		route.Queries(cfg.Match.Queries...)
 	}
 }
 
-func (s *Proxy) createRequestHandler(matcherName string, rule config.Matcher) func(w http.ResponseWriter, r *http.Request) {
-	return func(w http.ResponseWriter, r *http.Request) {
-		// ctx := context.WithValue(r.Context(), "matcher", matcherName)
-		// r = r.WithContext(ctx)
+func (s *Proxy) createRequestHandler(cfg config.Rule) func(w http.ResponseWriter, r *http.Request) {
 
-		// execute set of interceptors
-		// for _, hName := range rule.RequestHandlers {
-		// 	if !s.callHandler(hName, rule.ParseRequestBody, w, r) {
-		// 		return
-		// 	}
-		// }
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		// parse body if according flag is specified
+		// by default body is not parsed and passed "as is" to avoid request processing time increase
+		var body []byte
+		if cfg.ParseBody {
+			var err error
+			body, err = ioutil.ReadAll(r.Body)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return
+			}
+		}
+
+		// execute interceptors chain
+		for _, name := range cfg.OnRequest {
+			if !s.callInterceptor(name, body, w, r) {
+				return
+			}
+		}
 
 		// tunnel https request
 		if r.Method == http.MethodConnect {
@@ -112,80 +129,69 @@ func (s *Proxy) createRequestHandler(matcherName string, rule config.Matcher) fu
 	}
 }
 
-func (s *Proxy) callHandler(hName string, parseBody bool, w http.ResponseWriter, r *http.Request) bool {
-	return true
-	// handler, ok := s.handlers[hName]
-	// if !ok {
-	// 	http.Error(w, "handler does not exist", http.StatusServiceUnavailable)
-	// 	return false
-	// }
+func (s *Proxy) callInterceptor(name string, body []byte, w http.ResponseWriter, r *http.Request) bool {
+	handler, ok := s.handlers[name]
+	if !ok {
+		http.Error(w, fmt.Sprint(`unable to find "%s" interceptor`, name), http.StatusServiceUnavailable)
+		return false
+	}
 
-	// var err error
-	// var body []byte
-
-	// // read request body into buffer if flag specified
-	// if parseBody {
-	// 	body, err = ioutil.ReadAll(r.Body)
-	// 	if err != nil {
-	// 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	// 		return false
-	// 	}
-	// }
-
-	// data, err := handler.OnRequest(context.Background(), &proto.OnRequestInput{
-	// 	Req: &proto.HTTPRequest{
-	// 		Method:  r.Method,
-	// 		URL:     r.RequestURI,
-	// 		Headers: mapHeaders(r.Header),
-	// 		Body:    body,
-	// 	},
-	// })
-	// if err != nil {
-	// 	http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	// 	return false
-	// }
+	data, err := handler.OnRequest(context.Background(), &proto.OnRequestInput{
+		Req: &proto.HTTPRequest{
+			Method:  r.Method,
+			URL:     r.RequestURI,
+			Headers: mapHeaders(r.Header),
+			Body:    body,
+		},
+	})
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusServiceUnavailable)
+		return false
+	}
 
 	// s.log.
 	// 	WithField("handler", hName).
 	// 	WithField("action", data.Action.String()).
 	// 	Infof("%s %s", r.Method, r.URL)
 
-	// switch data.Action {
-	// case proto.OnRequestOutput_IGNORE:
-	// 	return true
-	// case proto.OnRequestOutput_RESPONSE:
-	// 	for k, v := range data.Res.Headers {
-	// 		w.Header().Set(k, v)
-	// 	}
-	// 	w.WriteHeader(int(data.Res.Status))
-	// 	w.Write(data.Res.Body)
-	// 	return false
+	switch data.Action {
+	// do not modify request and pass it further
+	case proto.OnRequestOutput_IGNORE:
+		return true
+	// stop processing request and return response
+	case proto.OnRequestOutput_RESPONSE:
+		for k, v := range data.Res.Headers {
+			w.Header().Set(k, v)
+		}
+		w.WriteHeader(int(data.Res.Status))
+		w.Write(data.Res.Body)
+		return false
+	// process request but update it
+	case proto.OnRequestOutput_FORWARD:
+		if data.Req.URL != "" {
+			url, err := url.Parse(data.Req.URL)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusServiceUnavailable)
+				return false
+			}
+			r.URL = url
+		}
+		if data.Req.Method != "" {
+			r.Method = data.Req.Method
+		}
 
-	// case proto.OnRequestOutput_FORWARD:
-	// 	if data.Req.URL != "" {
-	// 		url, err := url.Parse(data.Req.URL)
-	// 		if err != nil {
-	// 			http.Error(w, err.Error(), http.StatusServiceUnavailable)
-	// 			return false
-	// 		}
-	// 		r.URL = url
-	// 	}
-	// 	if data.Req.Method != "" {
-	// 		r.Method = data.Req.Method
-	// 	}
+		for k, v := range data.Req.Headers {
+			r.Header.Set(k, v)
+		}
 
-	// 	for k, v := range data.Req.Headers {
-	// 		r.Header.Set(k, v)
-	// 	}
-
-	// 	if parseBody && len(data.Req.Body) > 0 {
-	// 		r.Body = ioutil.NopCloser(bytes.NewBuffer(data.Req.Body))
-	// 	}
-	// 	return true
-	// default:
-	// 	http.Error(w, "wrong answer from the plugin", http.StatusServiceUnavailable)
-	// 	return false
-	// }
+		if len(data.Req.Body) > 0 {
+			r.Body = ioutil.NopCloser(bytes.NewBuffer(data.Req.Body))
+		}
+		return true
+	default:
+		http.Error(w, "wrong answer from the plugin", http.StatusServiceUnavailable)
+		return false
+	}
 }
 
 // convert http.Header slice to a map containing headers

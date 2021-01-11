@@ -1,16 +1,16 @@
 listen: localhost:8080
 
 # https://github.com/gorilla/mux#matching-routes
-matchers:
-  default: {}
-  google:
-    host: www.google.com
-    # path: /qwe
-    # pathPrefix: /qwe
-    # methods: ["POST"]
-    # schemes: ["http"]
-    # headers: ["X-Requested-With"]
-    # queries: ["key1", "key2"]
+# matchers:
+#   default: {}
+#   google:
+#     host: www.google.com
+#     # path: /qwe
+#     # pathPrefix: /qwe
+#     # methods: ["POST"]
+#     # schemes: ["http"]
+#     # headers: ["X-Requested-With"]
+#     # queries: ["key1", "key2"]
 
 # interceptor type:
 #   grpc: send request to specific GRPC plugin
@@ -35,6 +35,12 @@ interceptors:
       headers:
         X-Verdite-Passed: true
 
-routes:
-  default: ["pass"]
-  google: ["deny"]
+rules:
+  # reject requests to google
+  - match:
+      host: www.google.com
+    onRequest: ["deny"]
+    parseBody: true
+  # forward requests by default
+  - match: {}
+    onRequest: ["deny"]

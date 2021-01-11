@@ -11,21 +11,8 @@ import (
 // Config implements proxy configuration
 type Config struct {
 	Listen       string                 `yaml:"listen" validator:"hostname_port"`
-	Matchers     map[string]Matcher     `yaml:"matchers"`
 	Interceptors map[string]Interceptor `yaml:"interceptors"`
-	Routes       map[string][]string    `yaml:"routes"`
-}
-
-// Matcher describes http matching rules: https://github.com/gorilla/mux#matching-routes
-type Matcher struct {
-	Host       string   `yaml:"host" validator:"hostname"`
-	Path       string   `yaml:"path" validator:"uri startswith=/"`
-	PathPrefix string   `yaml:"pathPrefix" validator:"uri startswith=/"`
-	Methods    []string `yaml:"methods" validator:"oneof=GET POST PUT DELETE PATCH DELETE"`
-	Schemes    []string `yaml:"schemes" validator:"oneof=http https"`
-	Headers    []string `yaml:"headers"`
-	Queries    []string `yaml:"queries"`
-	ParseBody  bool     `yaml:"parseBody"`
+	Rules        []Rule                 `yaml:"rules"`
 }
 
 // Interceptor describes request interceptor
@@ -47,6 +34,24 @@ type InterceptorResponse struct {
 	Status  int               `yaml:"status" validator:"gte=100,lte=600"`
 	Body    string            `yaml:"body"`
 	Headers map[string]string `yaml:"headers"`
+}
+
+// Rule ...
+type Rule struct {
+	Match     Matcher  `yaml:"match"`
+	OnRequest []string `yaml:"onRequest"`
+	ParseBody bool     `yaml:"parseBoy"`
+}
+
+// Matcher describes http matching rules: https://github.com/gorilla/mux#matching-routes
+type Matcher struct {
+	Host       string   `yaml:"host" validator:"hostname"`
+	Path       string   `yaml:"path" validator:"uri startswith=/"`
+	PathPrefix string   `yaml:"pathPrefix" validator:"uri startswith=/"`
+	Methods    []string `yaml:"methods" validator:"oneof=GET POST PUT DELETE PATCH DELETE"`
+	Schemes    []string `yaml:"schemes" validator:"oneof=http https"`
+	Headers    []string `yaml:"headers"`
+	Queries    []string `yaml:"queries"`
 }
 
 // InterceptorRequest ...
